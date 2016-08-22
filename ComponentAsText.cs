@@ -180,6 +180,19 @@ public class ComponentAsText : EditorWindow
     static int currentGameObjectId = -1;
     static int currentComponentId = -1;
 
+
+    [MenuItem("GameObject/Tools/Copy as Text", false, 0)]
+    static void CopyGameObject()
+    {
+        Copy();
+    }
+
+    [MenuItem("GameObject/Tools/Paste from Text", false, 0)]
+    static void PasteGameObject()
+    {
+        Paste();
+    }
+
     [MenuItem("GameObject/Copy all components as Text")]
     static void Copy()
     {
