@@ -11,62 +11,6 @@ using System.Text;
 using System;
 using System.Reflection;
 
-public class XMLSerializableObject<T>
-{
-    public void Save(string path)
-    {
-        var serializer = new XmlSerializer(typeof(T));
-        using (var stream = new FileStream(path, FileMode.Create))
-        {
-            using (XmlWriter xmlWriter = new XmlTextWriter(stream, Encoding.UTF8))
-            {
-                serializer.Serialize(xmlWriter, this);
-            }
-        }
-    }
-
-    public string GetString()
-    {
-        string xmlText = "";
-        var serializer = new XmlSerializer(typeof(T));
-        using (StringWriter textWriter = new StringWriter())
-        {
-            serializer.Serialize(textWriter, this);
-            xmlText = textWriter.ToString();
-        }
-
-        return xmlText;
-    }
-
-    public static T Load(string path)
-    {
-        try
-        {
-            var serializer = new XmlSerializer(typeof(T));
-            using (var stream = new FileStream(path, FileMode.Open))
-            {
-                return (T) (serializer.Deserialize(stream));
-            }
-        }
-        catch (XmlException e) { }
-
-        return default(T);
-    }
-
-    //Loads the xml directly from the given string. Useful in combination with www.text.
-    public static T LoadFromText(string text)
-    {
-        try
-        {
-            var serializer = new XmlSerializer(typeof(T));
-            return (T)(serializer.Deserialize(new StreamReader(new MemoryStream(Encoding.UTF8.GetBytes(text)), Encoding.UTF8)));
-        }
-        catch (XmlException e) { }
-
-        return default(T);
-    }
-}
-
 public class SerializableGameObjectReference : XMLSerializableObject<SerializableGameObjectReference>
 {
     [XmlAttribute("GameObjectReferenceId")]
@@ -126,19 +70,6 @@ public class SerializableComponentProperty : XMLSerializableObject<SerializableC
     public int propertyType;
 }
 
-public class SerializableComponent : XMLSerializableObject<SerializableComponent>
-{
-    [XmlAttribute("ComponentName")]
-    public string componentName;
-
-    [XmlAttribute("ComponentId")]
-    public int componentId;
-
-    [XmlArray("ComponentProperties")]
-    [XmlArrayItem("ComponentProp")]
-    public List<SerializableComponentProperty> properties = new List<SerializableComponentProperty>();
-}
-
 public class SerializableGameObject : XMLSerializableObject<SerializableGameObject>
 {
     [XmlAttribute("GameObjectName")]
@@ -156,30 +87,42 @@ public class SerializableGameObject : XMLSerializableObject<SerializableGameObje
     public List<SerializableGameObject> children = new List<SerializableGameObject>();
 }
 
+// <?xml version="1.0" encoding="utf-16"?>
+// <SerializableGameObject xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+//   <GameObjectComponents>
+//     <Component ComponentName="Transform" />
+//     <Component ComponentName="UIButton" />
+//     <Component ComponentName="VRInteractiveItem" />
+//     <Component ComponentName="NormalButton" />
+//     <Component ComponentName="TweenScale" />
+//     <Component ComponentName="SphereCollider" />
+//     <Component ComponentName="Rigidbody" />
+//   </GameObjectComponents>
+// </SerializableGameObject>
+
 public class ComponentAsText : EditorWindow
 {
     // In order to perform Serialization of GameObject references
-    static List<SerializableGameObjectReference> gameObjectsSerializableReferences = new List<SerializableGameObjectReference>();
-    static List<GameObject> referencedGameObjects = new List<GameObject>();
-    static List<SerializableComponentProperty> objectReferenceProperties = new List<SerializableComponentProperty>();
+    public static List<SerializableGameObjectReference> gameObjectsSerializableReferences = new List<SerializableGameObjectReference>();
+    public static List<GameObject> referencedGameObjects = new List<GameObject>();
+    public static List<SerializableComponentProperty> objectReferenceProperties = new List<SerializableComponentProperty>();
     // In order to perform Serialization of Component references
-    static List<SerializableComponentReference> componentsSerializableReferences = new List<SerializableComponentReference>();
-    static List<Component> referencedComponents = new List<Component>();
-    static List<SerializableComponentProperty> componentReferenceProperties = new List<SerializableComponentProperty>();
+    public static List<SerializableComponentReference> componentsSerializableReferences = new List<SerializableComponentReference>();
+    public static List<Component> referencedComponents = new List<Component>();
+    public static List<SerializableComponentProperty> componentReferenceProperties = new List<SerializableComponentProperty>();
 
     // In order to perform Deserialization of GameObject references
-    static List<SerializableGameObjectReference> gameObjectsDeserializableReferences = new List<SerializableGameObjectReference>();
-    static List<Component> componentsToSetGameObject = new List<Component>();
-    static List<string> gameObjectPropertyNames = new List<string>();
+    public static List<SerializableGameObjectReference> gameObjectsDeserializableReferences = new List<SerializableGameObjectReference>();
+    public static List<Component> componentsToSetGameObject = new List<Component>();
+    public static List<string> gameObjectPropertyNames = new List<string>();
 
     // In order to perform Deserialization of Component references
-    static List<SerializableComponentReference> componentsDeserializableReferences = new List<SerializableComponentReference>();
-    static List<Component> componentsToSetComponent= new List<Component>();
-    static List<string> componentPropertyNames = new List<string>();
+    public static List<SerializableComponentReference> componentsDeserializableReferences = new List<SerializableComponentReference>();
+    public static List<Component> componentsToSetComponent= new List<Component>();
+    public static List<string> componentPropertyNames = new List<string>();
 
-    static int currentGameObjectId = -1;
-    static int currentComponentId = -1;
-
+    public static int currentGameObjectId = -1;
+    public static int currentComponentId = -1;
 
     [MenuItem("GameObject/Tools/Copy as Text", false, 0)]
     static void CopyGameObject()
@@ -191,6 +134,36 @@ public class ComponentAsText : EditorWindow
     static void PasteGameObject()
     {
         Paste();
+    }
+
+    [MenuItem("CONTEXT/Transform/Copy as Text", false, 150)]
+    static void CopyTransform()
+    {
+        Transform target = Selection.activeTransform;
+
+        if (target != null)
+        {
+            SerializableComponent sComponent = GetSerializableComponent(target);
+            if (sComponent != null)
+            {
+                EditorGUIUtility.systemCopyBuffer = sComponent.GetString();
+            }
+        }
+    }
+
+    [MenuItem("CONTEXT/Transform/Paste Values from Text", false, 150)]
+    static void PasteTransform()
+    {
+        Transform target = Selection.activeTransform;
+
+        if (target != null)
+        {
+            SerializableComponent sComponent = SerializableComponent.LoadFromText(EditorGUIUtility.systemCopyBuffer);
+            if (sComponent != null)
+            {
+                sComponent.ApplySerializedDataTo(target);
+            }
+        }
     }
 
     [MenuItem("GameObject/Copy all components as Text")]
@@ -276,6 +249,191 @@ public class ComponentAsText : EditorWindow
         }
     }
 
+    static SerializableComponent GetSerializableComponent(Component component)
+    {
+        SerializableComponent sComponent = new SerializableComponent();
+        sComponent.componentId = currentComponentId;
+        sComponent.componentName = component.GetType ().Name;
+
+        currentComponentId++;
+
+        SerializableComponentProperty sProp;
+
+        Type type = component.GetType();
+        BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Default | BindingFlags.DeclaredOnly;
+        PropertyInfo[] pinfos = type.GetProperties(flags);
+        foreach (var pinfo in pinfos) {
+             if (pinfo.CanWrite) {
+                 // try {
+                 //     Debug.Log(sComponent.componentName + "." + pinfo.Name + " = " + pinfo.GetValue(copiedComponents[c], null).ToString() +
+                 //        " [" + pinfo.PropertyType.ToString() + "] ");
+                 // }
+                 // catch { } // In case of NotImplementedException being thrown. For some reason specifying that exception didn't seem to catch it, so I didn't catch anything specific.
+
+                try {
+
+                    if (pinfo.PropertyType == typeof(string) ||
+                         pinfo.PropertyType == typeof(int)    ||
+                         pinfo.PropertyType == typeof(float)  ||
+                         pinfo.PropertyType == typeof(bool)  )
+                     {
+                        sProp = new SerializableComponentProperty();
+                        sProp.propertyName = pinfo.Name;
+                        if (pinfo.PropertyType == typeof(string) && pinfo.GetValue(component, null) == null)
+                        {
+                            sProp.propertyValue = "";
+                        }
+                        else
+                        {
+                            sProp.propertyValue = pinfo.GetValue(component, null).ToString();
+                        }
+
+                        if (pinfo.PropertyType == typeof(string))
+                            sProp.propertyType = 0;
+                        else if (pinfo.PropertyType == typeof(int))
+                            sProp.propertyType = 1;
+                        else if (pinfo.PropertyType == typeof(float))
+                            sProp.propertyType = 2;
+                        else if (pinfo.PropertyType == typeof(bool))
+                            sProp.propertyType = 3;
+                        sComponent.properties.Add(sProp);
+                     }
+                     else if (pinfo.PropertyType == typeof(Vector3))
+                     {
+                        sProp = new SerializableComponentProperty();
+                        sProp.propertyName = pinfo.Name;
+                        sProp.propertyValue = new SerializableVector3((Vector3)pinfo.GetValue(component, null)).GetString();
+                        sProp.propertyType = 4;
+                        sComponent.properties.Add(sProp);
+                     }
+                     else if (pinfo.PropertyType == typeof(Vector2))
+                     {
+                        sProp = new SerializableComponentProperty();
+                        sProp.propertyName = pinfo.Name;
+                        sProp.propertyValue = new SerializableVector2((Vector2)pinfo.GetValue(component, null)).GetString();
+                        sProp.propertyType = 5;
+                        sComponent.properties.Add(sProp);
+                     }
+                     else if (pinfo.PropertyType == typeof(GameObject) && pinfo.GetValue(component, null) != null)
+                     {
+                        SerializableGameObjectReference sGObjectReference = new SerializableGameObjectReference()
+                        {
+                            gameObjectReferenceName = ((GameObject)pinfo.GetValue(component, null)).name
+                        };
+                        gameObjectsSerializableReferences.Add(sGObjectReference);
+                        referencedGameObjects.Add((GameObject)pinfo.GetValue(component, null));
+
+                        sProp = new SerializableComponentProperty();
+                        sProp.propertyName = pinfo.Name;
+                        //sProp.propertyValue
+                        sProp.propertyType = 6;
+                        sComponent.properties.Add(sProp);
+                        objectReferenceProperties.Add(sProp);
+                     }
+                     else if ((pinfo.PropertyType == typeof(Component) || pinfo.PropertyType.IsSubclassOf(typeof(Component))) &&
+                        pinfo.GetValue(component, null) != null)
+                     {
+                        SerializableComponentReference sComponentReference = new SerializableComponentReference()
+                        {
+                            componentReferenceName = ((Component)pinfo.GetValue(component, null)).GetType ().Name
+                        };
+                        componentsSerializableReferences.Add(sComponentReference);
+                        referencedComponents.Add((Component)pinfo.GetValue(component, null));
+
+                        sProp = new SerializableComponentProperty();
+                        sProp.propertyName = pinfo.Name;
+                        //sProp.propertyValue
+                        sProp.propertyType = 7;
+                        sComponent.properties.Add(sProp);
+                        componentReferenceProperties.Add(sProp);
+                     }
+                 }
+                 catch {}
+             }
+         }
+
+         FieldInfo[] finfos = type.GetFields(flags);
+         foreach (var finfo in finfos) {
+             if (finfo.FieldType == typeof(string) ||
+                     finfo.FieldType == typeof(int)    ||
+                     finfo.FieldType == typeof(float)  ||
+                     finfo.FieldType == typeof(bool)  )
+                 {
+                    sProp = new SerializableComponentProperty();
+                    sProp.propertyName = finfo.Name;
+                    if (finfo.FieldType == typeof(string) && finfo.GetValue(component) == null)
+                    {
+                        sProp.propertyValue = "";
+                    }
+                    else
+                    {
+                        sProp.propertyValue = finfo.GetValue(component).ToString();
+                    }
+
+                    if (finfo.FieldType == typeof(string))
+                        sProp.propertyType = 0;
+                    else if (finfo.FieldType == typeof(int))
+                        sProp.propertyType = 1;
+                    else if (finfo.FieldType == typeof(float))
+                        sProp.propertyType = 2;
+                    else if (finfo.FieldType == typeof(bool))
+                        sProp.propertyType = 3;
+                    sComponent.properties.Add(sProp);
+                 }
+                 else if (finfo.FieldType == typeof(Vector3))
+                 {
+                    sProp = new SerializableComponentProperty();
+                    sProp.propertyName = finfo.Name;
+                    sProp.propertyValue = new SerializableVector3((Vector3)finfo.GetValue(component)).GetString();
+                    sProp.propertyType = 4;
+                    sComponent.properties.Add(sProp);
+                 }
+                 else if (finfo.FieldType == typeof(Vector2))
+                 {
+                    sProp = new SerializableComponentProperty();
+                    sProp.propertyName = finfo.Name;
+                    sProp.propertyValue = new SerializableVector2((Vector2)finfo.GetValue(component)).GetString();
+                    sProp.propertyType = 5;
+                    sComponent.properties.Add(sProp);
+                 }
+                 else if (finfo.FieldType == typeof(GameObject) && ((GameObject)finfo.GetValue(component)) != null)
+                 {
+                    SerializableGameObjectReference sGObjectReference = new SerializableGameObjectReference()
+                    {
+                        gameObjectReferenceName = ((GameObject)finfo.GetValue(component)).name
+                    };
+                    gameObjectsSerializableReferences.Add(sGObjectReference);
+                    referencedGameObjects.Add((GameObject)finfo.GetValue(component));
+
+                    sProp = new SerializableComponentProperty();
+                    sProp.propertyName = finfo.Name;
+                    //sProp.propertyValue
+                    sProp.propertyType = 6;
+                    sComponent.properties.Add(sProp);
+                    objectReferenceProperties.Add(sProp);
+                 }
+                 else if ((finfo.FieldType == typeof(Component) || finfo.FieldType.IsSubclassOf(typeof(Component))) &&
+                    finfo.GetValue(component) != null)
+                 {
+                    SerializableComponentReference sComponentReference = new SerializableComponentReference()
+                    {
+                        componentReferenceName = ((Component)finfo.GetValue(component)).GetType ().Name
+                    };
+                    componentsSerializableReferences.Add(sComponentReference);
+                    referencedComponents.Add((Component)finfo.GetValue(component));
+
+                    sProp = new SerializableComponentProperty();
+                    sProp.propertyName = finfo.Name;
+                    //sProp.propertyValue
+                    sProp.propertyType = 7;
+                    sComponent.properties.Add(sProp);
+                    componentReferenceProperties.Add(sProp);
+                 }
+        }
+
+        return sComponent;
+    }
+
     static SerializableGameObject GetSerializableGameObject(GameObject gameObject)
     {
         if (gameObject == null)
@@ -296,181 +454,7 @@ public class ComponentAsText : EditorWindow
 
             for (int c = 0; c < copiedComponents.Length; c++)
             {
-                sComponent = new SerializableComponent();
-                sComponent.componentId = currentComponentId;
-                sComponent.componentName = copiedComponents[c].GetType ().Name;
-
-                currentComponentId++;
-
-                SerializableComponentProperty sProp;
-
-                Type type = copiedComponents[c].GetType();
-                BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Default | BindingFlags.DeclaredOnly;
-                PropertyInfo[] pinfos = type.GetProperties(flags);
-                foreach (var pinfo in pinfos) {
-                     if (pinfo.CanWrite) {
-
-                        try {
-
-                            if (pinfo.PropertyType == typeof(string) ||
-                                 pinfo.PropertyType == typeof(int)    ||
-                                 pinfo.PropertyType == typeof(float)  ||
-                                 pinfo.PropertyType == typeof(bool)  )
-                             {
-                                sProp = new SerializableComponentProperty();
-                                sProp.propertyName = pinfo.Name;
-                                if (pinfo.PropertyType == typeof(string) && pinfo.GetValue(copiedComponents[c], null) == null)
-                                {
-                                    sProp.propertyValue = "";
-                                }
-                                else
-                                {
-                                    sProp.propertyValue = pinfo.GetValue(copiedComponents[c], null).ToString();
-                                }
-
-                                if (pinfo.PropertyType == typeof(string))
-                                    sProp.propertyType = 0;
-                                else if (pinfo.PropertyType == typeof(int))
-                                    sProp.propertyType = 1;
-                                else if (pinfo.PropertyType == typeof(float))
-                                    sProp.propertyType = 2;
-                                else if (pinfo.PropertyType == typeof(bool))
-                                    sProp.propertyType = 3;
-                                sComponent.properties.Add(sProp);
-                             }
-                             else if (pinfo.PropertyType == typeof(Vector3))
-                             {
-                                sProp = new SerializableComponentProperty();
-                                sProp.propertyName = pinfo.Name;
-                                sProp.propertyValue = new SerializableVector3((Vector3)pinfo.GetValue(copiedComponents[c], null)).GetString();
-                                sProp.propertyType = 4;
-                                sComponent.properties.Add(sProp);
-                             }
-                             else if (pinfo.PropertyType == typeof(Vector2))
-                             {
-                                sProp = new SerializableComponentProperty();
-                                sProp.propertyName = pinfo.Name;
-                                sProp.propertyValue = new SerializableVector2((Vector2)pinfo.GetValue(copiedComponents[c], null)).GetString();
-                                sProp.propertyType = 5;
-                                sComponent.properties.Add(sProp);
-                             }
-                             else if (pinfo.PropertyType == typeof(GameObject) && pinfo.GetValue(copiedComponents[c], null) != null)
-                             {
-                                SerializableGameObjectReference sGObjectReference = new SerializableGameObjectReference()
-                                {
-                                    gameObjectReferenceName = ((GameObject)pinfo.GetValue(copiedComponents[c], null)).name
-                                };
-                                gameObjectsSerializableReferences.Add(sGObjectReference);
-                                referencedGameObjects.Add((GameObject)pinfo.GetValue(copiedComponents[c], null));
-
-                                sProp = new SerializableComponentProperty();
-                                sProp.propertyName = pinfo.Name;
-                                //sProp.propertyValue
-                                sProp.propertyType = 6;
-                                sComponent.properties.Add(sProp);
-                                objectReferenceProperties.Add(sProp);
-                             }
-                             else if ((pinfo.PropertyType == typeof(Component) || pinfo.PropertyType.IsSubclassOf(typeof(Component))) &&
-                                pinfo.GetValue(copiedComponents[c], null) != null)
-                             {
-                                SerializableComponentReference sComponentReference = new SerializableComponentReference()
-                                {
-                                    componentReferenceName = ((Component)pinfo.GetValue(copiedComponents[c], null)).GetType ().Name
-                                };
-                                componentsSerializableReferences.Add(sComponentReference);
-                                referencedComponents.Add((Component)pinfo.GetValue(copiedComponents[c], null));
-
-                                sProp = new SerializableComponentProperty();
-                                sProp.propertyName = pinfo.Name;
-                                //sProp.propertyValue
-                                sProp.propertyType = 7;
-                                sComponent.properties.Add(sProp);
-                                componentReferenceProperties.Add(sProp);
-                             }
-                         }
-                         catch {}
-                     }
-                 }
-
-                 FieldInfo[] finfos = type.GetFields(flags);
-                 foreach (var finfo in finfos) {
-                     if (finfo.FieldType == typeof(string) ||
-                             finfo.FieldType == typeof(int)    ||
-                             finfo.FieldType == typeof(float)  ||
-                             finfo.FieldType == typeof(bool)  )
-                         {
-                            sProp = new SerializableComponentProperty();
-                            sProp.propertyName = finfo.Name;
-                            if (finfo.FieldType == typeof(string) && finfo.GetValue(copiedComponents[c]) == null)
-                            {
-                                sProp.propertyValue = "";
-                            }
-                            else
-                            {
-                                sProp.propertyValue = finfo.GetValue(copiedComponents[c]).ToString();
-                            }
-
-                            if (finfo.FieldType == typeof(string))
-                                sProp.propertyType = 0;
-                            else if (finfo.FieldType == typeof(int))
-                                sProp.propertyType = 1;
-                            else if (finfo.FieldType == typeof(float))
-                                sProp.propertyType = 2;
-                            else if (finfo.FieldType == typeof(bool))
-                                sProp.propertyType = 3;
-                            sComponent.properties.Add(sProp);
-                         }
-                         else if (finfo.FieldType == typeof(Vector3))
-                         {
-                            sProp = new SerializableComponentProperty();
-                            sProp.propertyName = finfo.Name;
-                            sProp.propertyValue = new SerializableVector3((Vector3)finfo.GetValue(copiedComponents[c])).GetString();
-                            sProp.propertyType = 4;
-                            sComponent.properties.Add(sProp);
-                         }
-                         else if (finfo.FieldType == typeof(Vector2))
-                         {
-                            sProp = new SerializableComponentProperty();
-                            sProp.propertyName = finfo.Name;
-                            sProp.propertyValue = new SerializableVector2((Vector2)finfo.GetValue(copiedComponents[c])).GetString();
-                            sProp.propertyType = 5;
-                            sComponent.properties.Add(sProp);
-                         }
-                         else if (finfo.FieldType == typeof(GameObject) && ((GameObject)finfo.GetValue(copiedComponents[c])) != null)
-                         {
-                            SerializableGameObjectReference sGObjectReference = new SerializableGameObjectReference()
-                            {
-                                gameObjectReferenceName = ((GameObject)finfo.GetValue(copiedComponents[c])).name
-                            };
-                            gameObjectsSerializableReferences.Add(sGObjectReference);
-                            referencedGameObjects.Add((GameObject)finfo.GetValue(copiedComponents[c]));
-
-                            sProp = new SerializableComponentProperty();
-                            sProp.propertyName = finfo.Name;
-                            //sProp.propertyValue
-                            sProp.propertyType = 6;
-                            sComponent.properties.Add(sProp);
-                            objectReferenceProperties.Add(sProp);
-                         }
-                         else if ((finfo.FieldType == typeof(Component) || finfo.FieldType.IsSubclassOf(typeof(Component))) &&
-                            finfo.GetValue(copiedComponents[c]) != null)
-                         {
-                            SerializableComponentReference sComponentReference = new SerializableComponentReference()
-                            {
-                                componentReferenceName = ((Component)finfo.GetValue(copiedComponents[c])).GetType ().Name
-                            };
-                            componentsSerializableReferences.Add(sComponentReference);
-                            referencedComponents.Add((Component)finfo.GetValue(copiedComponents[c]));
-
-                            sProp = new SerializableComponentProperty();
-                            sProp.propertyName = finfo.Name;
-                            //sProp.propertyValue
-                            sProp.propertyType = 7;
-                            sComponent.properties.Add(sProp);
-                            componentReferenceProperties.Add(sProp);
-                         }
-                 }
-
+                sComponent = GetSerializableComponent(copiedComponents[c]);
                 sGObject.components.Add(sComponent);
             }
 
@@ -498,7 +482,7 @@ public class ComponentAsText : EditorWindow
 
         string componentsText = EditorGUIUtility.systemCopyBuffer;
 
-        //Debug.Log("ComponentAsText::Paste - " + componentsText);
+        //Debug.Log("gil - ComponentAsText::Paste - " + componentsText);
 
         gameObjectsDeserializableReferences.Clear();
         componentsToSetGameObject.Clear();
@@ -514,13 +498,13 @@ public class ComponentAsText : EditorWindow
 
         if (sGObject != null)
         {
-            //Debug.Log("ComponentAsText::Paste - " + Selection.gameObjects.Length);
+            //Debug.Log("gil - ComponentAsText::Paste - " + Selection.gameObjects.Length);
 
             foreach (var targetGameObject in Selection.gameObjects)
             {
                 if (!targetGameObject) continue;
 
-                Debug.Log("ComponentAsText::Paste - GameObject.name = " + targetGameObject.name);
+                Debug.Log("gil - ComponentAsText::Paste - GameObject.name = " + targetGameObject.name);
 
                 PasteSerializableGameObject(targetGameObject, sGObject);
 
@@ -569,7 +553,7 @@ public class ComponentAsText : EditorWindow
     /// </summary>
     static void VerifyComponent(Component component, SerializableComponent sComponent)
     {
-        //Debug.Log("ComponentAsText::VerifyComponent - testing " + component.GetType().Name + " with SerializableComponent " + sComponent.componentName);
+        //Debug.Log("gil - ComponentAsText::VerifyComponent - testing " + component.GetType().Name + " with SerializableComponent " + sComponent.componentName);
 
         for (int i = 0; i < componentsDeserializableReferences.Count; i++)
         {
@@ -678,126 +662,7 @@ public class ComponentAsText : EditorWindow
 
             if (comp == null) continue;
 
-            foreach (var prop in copiedComponent.properties)
-            {
-                Type type = comp.GetType();
-                BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Default | BindingFlags.DeclaredOnly;
-                PropertyInfo[] pinfos = type.GetProperties(flags);
-                foreach (var pinfo in pinfos) {
-                     if (pinfo.CanWrite && pinfo.Name == prop.propertyName) {
-                         try {
-                            if (prop.propertyType == 0)
-                            {
-                                pinfo.SetValue(comp, prop.propertyValue, null);
-                            }
-                            else if (prop.propertyType == 1)
-                            {
-                                pinfo.SetValue(comp, int.Parse(prop.propertyValue), null);
-                            }
-                            else if (prop.propertyType == 2)
-                            {
-                                pinfo.SetValue(comp, float.Parse(prop.propertyValue), null);
-                            }
-                            else if (prop.propertyType == 3)
-                            {
-                                Debug.Log("Trying to set " + copiedComponent.componentName + "." + prop.propertyName + " = " + prop.propertyValue +
-                                " [" + pinfo.PropertyType.ToString() + "] ");
-
-                                pinfo.SetValue(comp, bool.Parse(prop.propertyValue), null);
-                            }
-                            else if (prop.propertyType == 4)
-                            {
-                                pinfo.SetValue(comp, SerializableVector3.LoadFromText(prop.propertyValue).GetVector3(), null);
-                            }
-                            else if (prop.propertyType == 5)
-                            {
-                                pinfo.SetValue(comp, SerializableVector2.LoadFromText(prop.propertyValue).GetVector2(), null);
-                            }
-                            else if (prop.propertyType == 6 && !string.IsNullOrEmpty(prop.propertyValue))
-                            {
-                                SerializableGameObjectReference sGObjectReference = SerializableGameObjectReference.LoadFromText(prop.propertyValue);
-
-                                if (sGObjectReference != null)
-                                {
-                                    gameObjectsDeserializableReferences.Add(sGObjectReference);
-                                    componentsToSetGameObject.Add(comp);
-                                    gameObjectPropertyNames.Add(prop.propertyName);
-                                }
-                            }
-                            else if (prop.propertyType == 7 && !string.IsNullOrEmpty(prop.propertyValue))
-                            {
-                                SerializableComponentReference sComponentReference = SerializableComponentReference.LoadFromText(prop.propertyValue);
-
-                                if (sComponentReference != null)
-                                {
-                                    componentsDeserializableReferences.Add(sComponentReference);
-                                    componentsToSetComponent.Add(comp);
-                                    componentPropertyNames.Add(prop.propertyName);
-                                }
-                            }
-                        }
-                        catch { } // In case of NotImplementedException being thrown. For some reason specifying that exception didn't seem to catch it, so I didn't catch anything specific.
-
-                    }
-                }
-                FieldInfo[] finfos = type.GetFields(flags);
-                foreach (var finfo in finfos) {
-                    if (finfo.Name == prop.propertyName) {
-                         try {
-                            if (prop.propertyType == 0)
-                            {
-                                finfo.SetValue(comp, prop.propertyValue);
-                            }
-                            else if (prop.propertyType == 1)
-                            {
-                                finfo.SetValue(comp, int.Parse(prop.propertyValue));
-                            }
-                            else if (prop.propertyType == 2)
-                            {
-                                finfo.SetValue(comp, float.Parse(prop.propertyValue));
-                            }
-                            else if (prop.propertyType == 3)
-                            {
-                                Debug.Log("Trying to set " + copiedComponent.componentName + "." + prop.propertyName + " = " + prop.propertyValue +
-                                " [" + finfo.FieldType.ToString() + "] ");
-
-                                finfo.SetValue(comp, bool.Parse(prop.propertyValue));
-                            }
-                            else if (prop.propertyType == 4)
-                            {
-                                finfo.SetValue(comp, SerializableVector3.LoadFromText(prop.propertyValue).GetVector3());
-                            }
-                            else if (prop.propertyType == 5)
-                            {
-                                finfo.SetValue(comp, SerializableVector2.LoadFromText(prop.propertyValue).GetVector2());
-                            }
-                            else if (prop.propertyType == 6)
-                            {
-                                SerializableGameObjectReference sGObjectReference = SerializableGameObjectReference.LoadFromText(prop.propertyValue);
-
-                                if (sGObjectReference != null)
-                                {
-                                    gameObjectsDeserializableReferences.Add(sGObjectReference);
-                                    componentsToSetGameObject.Add(comp);
-                                    gameObjectPropertyNames.Add(prop.propertyName);
-                                }
-                            }
-                            else if (prop.propertyType == 7)
-                            {
-                                SerializableComponentReference sComponentReference = SerializableComponentReference.LoadFromText(prop.propertyValue);
-
-                                if (sComponentReference != null)
-                                {
-                                    componentsDeserializableReferences.Add(sComponentReference);
-                                    componentsToSetComponent.Add(comp);
-                                    componentPropertyNames.Add(prop.propertyName);
-                                }
-                            }
-                         }
-                         catch { } // In case of NotImplementedException being thrown. For some reason specifying that exception didn't seem to catch it, so I didn't catch anything specific.
-                    }
-                }
-            }
+            copiedComponent.ApplySerializedDataTo(comp);
         }
 
         GameObject childGObject;
